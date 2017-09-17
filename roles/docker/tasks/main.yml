@@ -1,0 +1,55 @@
+---
+# tasks file for roles/docker
+
+- name: install docker repo
+  yum_repository:
+    name: dockerrepo
+    description: "Docker Repository"
+    baseurl: "https://yum.dockerproject.org/repo/main/centos/7/"
+    enabled: yes
+    gpgcheck: yes
+    gpgkey: "https://yum.dockerproject.org/gpg"
+
+#- name: add epel repo
+#  yum_repository:
+#    name: epel
+#    description: "epel"
+#    baseurl: http://dl.fedoraproject.org/pub/epel/7/x86_64/e/epel-release-7-10.noarch.rpm
+#    enabled: yes
+
+- name: install docker-engine
+  yum: name="docker-engine-1.10.1-1.el7.centos.x86_64" state=latest
+  notify: restart docker
+
+- name: install epel-release
+  yum: name={{ item }} state=latest
+  with_items:
+    - epel-release
+
+- name: install python and pip for docker-py
+  yum: name={{ item }} state=latest
+  with_items:
+    - epel-release
+    - python
+    - python-pip
+
+- name: install docker-py (Docker API written in Python)
+  pip: name=docker-py
+
+- name: start Docker before logging in
+  service: name=docker state=started enabled=yes
+
+- name: login to docker hub
+  docker_login:
+    username: "gumbercules"
+    password: "10countmerpula48"
+    email: "matthew.james.ray@gmail.com"
+
+- name: chown root.docker all the things in /bin/docker and /usr/bin/docker
+  file:
+    path: "{{ item }}"
+    owner: root
+    group: docker
+  with_items:
+    - /bin/docker
+    - /usr/bin/docker
