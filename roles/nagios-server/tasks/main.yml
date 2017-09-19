@@ -1,0 +1,148 @@
+---
+# tasks file for roles/nagios-server
+- name: install lamp stack
+  yum: name={{ item }} state=latest
+  with_items:
+    - httpd
+    - postgresql-server
+    - postgresql-contrib
+    - php
+    - php-pgsql
+    - php-fpm
+
+- name: install build dependencies
+  yum: name={{ item }} state=latest
+  with_items:
+    - gcc
+    - glibc
+    - glibc-common
+    - gd
+    - gd-devel
+    - make
+    - net-snmp
+    - openssl-devel
+    - xinetd
+    - unzip
+
+- name: add the group nagcmd
+  group:
+    name: nagcmd
+    state: present
+
+- name: add the user nagios
+  user:
+    name: nagios
+    groups: nagcmd
+    state: present
+
+- name: add the webserver user to the nagcmd group
+  user:
+    name: apache
+    groups: nagcmd
+    append: yes
+    state: present
+
+- name: make nagios install directory
+  file:
+    path: /opt/nagios
+    state: directory
+    owner: mray
+    group: mray
+    mode: u=wrx,g=r,o=r
+
+- name: download and extract nagios-core
+  unarchive:
+    src: https://assets.nagios.com/downloads/nagioscore/releases/nagios-4.3.2.tar.gz
+    dest: /opt/nagios
+    remote_src: yes
+
+- name: compile nagios-core
+  shell: "{{ item }}"
+  args:
+    chdir: /opt/nagios/nagios-4.3.2
+  with_items:
+    - "./configure --with-command-group=nagcmd"
+    - "make all"
+    - "make install"
+    - "make install-commandmode"
+    - "make install-init"
+    - "make install-config"
+    - "make install-webconf"
+
+- name: download and extract nagios-plugins
+  unarchive:
+    src: http://nagios-plugins.org/download/nagios-plugins-2.1.1.tar.gz
+    dest: /opt/nagios
+    remote_src: yes
+
+- name: compile nagios-plugins
+  shell: "{{ item }}"
+  args:
+    chdir: /opt/nagios/nagios-plugins-2.1.1
+  with_items:
+    - "./configure --with-nagios-user=nagios --with-nagios-group=nagios --with-openssl"
+    - "make"
+    - "make install"
+
+- name: download and extract nrpe
+  unarchive:
+    src: http://downloads.sourceforge.net/project/nagios/nrpe-2.x/nrpe-2.15/nrpe-2.15.tar.gz
+    dest: /opt/nagios
+    remote_src: yes
+
+- name: compile nrpe
+  shell: "{{ item }}"
+  args:
+    chdir: /opt/nagios/nrpe-2.15
+  with_items:
+    - "./configure --enable-command-args --with-nagios-user=nagios --with-nagios-group=nagios --with-ssl=/usr/bin/openssl --with-ssl-lib=/usr/lib/x86_64-linux-gnu"
+    - "make all"
+    - "make install"
+    - "make install-daemon-config"
+
+#- name: edit nrpe config to allow access from nagios server
+#  template:
+#    src: .j2
+#    dest: /etc/xinetd.d/nrpe
+#    backup: yes
+
+- name: reload systemd manager configuration
+  shell: systemctl daemon-reload
+
+- name: restart xinetd
+  service:
+    name: xinetd
+    state: restarted
+
+- name: make nagios hosts directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: nagios
+    group: nagios
+    mode: u=wrx,g=wrx,o=rx
+  with_items:
+    - /usr/local/nagios/etc/objects/commands
+    - /usr/local/nagios/etc/objects/contacts
+    - /usr/local/nagios/etc/objects/contactgroups
+    - /usr/local/nagios/etc/objects/hosts
+    - /usr/local/nagios/etc/objects/hostgroups
+    - /usr/local/nagios/etc/objects/services
+    - /usr/local/nagios/etc/objects/servicegroups
+    - /usr/local/nagios/etc/objects/templates
+    - /usr/local/nagios/etc/objects/timeperiods
+
+#- name: edit nagios configuration file
+#  template:
+#    src: .j2
+#    dest: /usr/local/nagios/etc/nagios.cfg
+
+- name: restart nagios
+  service:
+    name: nagios
+    state: restarted
+
+- name: restart apache
+  service:
+    name: httpd
+    state: restarted

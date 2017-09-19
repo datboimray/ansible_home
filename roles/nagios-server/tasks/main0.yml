@@ -1,0 +1,64 @@
+---
+# tasks file for roles/nagios-server
+- name: install lamp stack
+  yum: name={{ item }} state=latest
+  with_items:
+    - httpd
+    - postgresql-server
+    - postgresql-contrib
+    - php
+    - psql-php
+    - php-fpm
+
+- name: install build dependencies
+  yum: name={{ item }} state=latest
+  with_items:
+    - gcc
+    - glibc
+    - glibc-common
+    - gd
+    - gd-devel
+    - make
+    - net-snmp
+    - openssl-devel
+    - xinetd
+    - unzip
+
+
+
+- name: Create nagios admin user
+  command: htpasswd -b -c /etc/nagios/passwd {{nagios_username}} {{nagios_password}}
+  ignore_errors: true
+  when: nagios_user_pwfile_exists != 0
+
+- name: Configure nagios main configuration
+  copy: src=nagios.cfg dest=/etc/nagios/nagios.cfg
+
+- name: Configure nagios localhost monitoring
+  copy: src=localhost.cfg dest=/etc/nagios/objects/localhost.cfg
+
+- name: Create generic nagios services config
+  copy: src=services.cfg dest=/etc/nagios/
+
+- name: Generate the nagios monitoring templates
+  template: src={{ item + ".j2" }}
+            dest=/etc/nagios/conf.d/{{ item }}
+  with_items:
+    - oobservers.cfg
+    - switches.cfg
+    - webservers.cfg
+    - servers.cfg
+    - commands.cfg
+    - elkservers.cfg
+    - elasticsearch.cfg
+    - idrac.cfg
+    - supermicro-6018r.cfg
+    - supermicro-6048r.cfg
+    - supermicro-1028r.cfg
+  register: nagios_needs_restart
+
+- name: Generate the nagios contact template
+  template: src={{ item + ".j2" }}
+            dest=/etc/nagios/objects/{{ item }}
+  with_items:
+    - contacts.cfg  
